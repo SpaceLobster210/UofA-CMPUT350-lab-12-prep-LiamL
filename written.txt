@@ -1,3 +1,7 @@
-a.
-b.
-c.
+a.	sequence: (0,6, 0.6), (0.8, 0.8), (0.9, 0.9), (0.95, 0.95), (0.97, 0.97)
+	constant geometry: (0.1 0.1)
+	linear geometry: AABB {(0.5 0.5), (1, 1)}
+b. The node will just keep trying to split, but all primitives are sorted into the same child node. So that child therefore also has too many primitives and this repeats until it reaches the maximum subdivision length. We could possibly fix this by checking for and removing duplicate primitives.
+c. 	translations: Objects and their primitives may move into a different quadrant, and may have updated intersections.
+	rotations: AABBs may change in size and primitives may enter a different quadrant, giving objects and their primitives updated intersections.
+I believe quadtrees are great for data that does not drastically change position, since the data will generally remain in a similar part of the tree and we will not have to do much restructuring. If our data is constantly experiencing drastic changes, a quad tree might not be a good fit since we will need to completely restructure our tree often.
