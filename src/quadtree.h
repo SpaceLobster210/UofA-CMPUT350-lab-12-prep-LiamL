@@ -178,9 +178,48 @@ public:
     // Appends primitive indicies whose bounds intersect with the given queryBounds to candidates.
     // Returns the number of intersection candidates found
     uint32_t queryIntersecting(const AABB<float>& queryBounds, std::vector<uint32_t>& candidates) {
-        // TODO -- do not use recursion, but you may emulate it yourself.
-        return 0;
+        int candidatesFound = 0;
+        // tuple = {nodeIdx, childDirection, bounds}
+        std::vector<std::tuple<uint32_t, uint32_t, AABB<float>>> nodeStack = { {0, 0, mBounds} };
+
+        while (!nodeStack.empty()) {
+            std::tuple<uint32_t, uint32_t, AABB<float>>& curTuple = nodeStack.back();
+            uint32_t nodeIdx = std::get<0>(curTuple);
+            uint32_t& childDir = std::get<1>(curTuple);
+            AABB<float>& nodeBounds = std::get<2>(curTuple);
+
+            QuadTreeNode* curNode = &mNodes[nodeIdx];
+
+            if (!nodeBounds.intersects(queryBounds)) { nodeStack.pop_back(); }  // Check if we need to explore node
+
+            else if (curNode->isLeaf() || childDir > 3) {                       // Check primitives
+                uint32_t primIdx = curNode->primitivesIdx;
+                while (primIdx != QuadTreeNode::INVALID_IDX) {
+                    AABB<float>& primBounds = mPrimitiveBounds[primIdx];
+
+                    if (queryBounds.intersects(primBounds)) {
+                        candidates.push_back(primIdx);
+                        candidatesFound += 1;
+                    }
+
+                    primIdx = mNextPrimitiveIdx[primIdx];
+                }
+                nodeStack.pop_back();
+            }
+
+            else {                                                              // Handle 'recursion'
+                uint32_t dirNext = childDir;
+                childDir += 1;
+                AABB<float> boundsNext = nodeBounds;
+                
+                aabbEnter(boundsNext, static_cast<OrdinalDirection>(dirNext));
+                nodeStack.push_back({ curNode->childIdx + dirNext, 0, boundsNext });
+            }
+        } 
+
+        return candidatesFound;
     }
+    // TODO
 
     // suitable for sparse updates
     void remove(uint32_t primIndex) {
@@ -290,14 +329,41 @@ private:
     // Precondition: currentCell contains query.
     OrdinalDirection aabbQueryQuadrant(const AABB<float>& query,
                                        const AABB<float>& currentCell) const {
-        return {};
+        sf::Vector2<float> midPoint = currentCell.middle();
+
+        AABB<float> quadNW = {currentCell.minPoint, midPoint};
+        if (quadNW.contains(query)) { return OrdinalDirection::NW; };
+
+        AABB<float> quadNE = {sf::Vector2<float>(midPoint.x, currentCell.minPoint.y), sf::Vector2<float>(currentCell.maxPoint.x, midPoint.y)};
+        if (quadNE.contains(query)) { return OrdinalDirection::NE; };
+
+        AABB<float> quadSW = {sf::Vector2<float>(currentCell.minPoint.x, midPoint.y), sf::Vector2<float>(midPoint.x, currentCell.maxPoint.y)};
+        if (quadSW.contains(query)) { return OrdinalDirection::SW; };
+
+        AABB<float> quadSE = {midPoint, currentCell.maxPoint};
+        if (quadSE.contains(query)) { return OrdinalDirection::SE; };
+
+        return OrdinalDirection::INVALID_DIRECTION;
     };
     // TODO
 
     // modifies a given AABB to obtain the resulting AABB if we were entering the cell on its
     // "direction" quadrant
     // Precondition: direction is not INVALID
-    void aabbEnter(AABB<float>& bounds, OrdinalDirection direction) const {};
+    void aabbEnter(AABB<float>& bounds, OrdinalDirection direction) const {
+        if (direction == OrdinalDirection::NW) { bounds.maxPoint = bounds.middle(); }
+        else if (direction == OrdinalDirection::NE) {
+            AABB<float> quadNE = {sf::Vector2<float>(bounds.middle().x, bounds.minPoint.y), sf::Vector2<float>(bounds.maxPoint.x, bounds.middle().y)};
+            bounds.minPoint = quadNE.minPoint;
+            bounds.maxPoint = quadNE.maxPoint;
+        }
+        else if (direction == OrdinalDirection::SW) {
+            AABB<float> quadSW = {sf::Vector2<float>(bounds.minPoint.x, bounds.middle().y), sf::Vector2<float>(bounds.middle().x, bounds.maxPoint.y)};
+            bounds.minPoint = quadSW.minPoint;
+            bounds.maxPoint = quadSW.maxPoint;
+        }
+        else if (direction == OrdinalDirection::SE) { bounds.minPoint = bounds.middle(); }
+    };
     // TODO
 
     AABB<float> mBounds;
